@@ -40,12 +40,8 @@ to quickly create a Cobra application.`,
 		p.ParseComments(f.Comments)
 		p.ParseDeclarations(f.Decls)
 		fname := args[0] + ".md"
-		buf, err = ioutil.ReadAll(p.Flush())
-		if err != nil {
-			fmt.Println(err)
-		}
 
-		ioutil.WriteFile(fname, buf, 777)
+		ioutil.WriteFile(fname, p.Flush(), 777)
 	},
 }
 

@@ -1,17 +1,5 @@
-package internal
+# New file
 
-import (
-	"fmt"
-	"go/ast"
-	"strings"
-)
-
-const (
-	TEXT = iota
-	PIN
-)
-
-/*POST
 ## ASTs
 Abstract Syntax Tree é o tipico tema que reramente aparece no nosso dia a dia com desenvolvimento
 mas que no dia que precisamos dela, vira um problema sem tamanho. Eu vou mostrar que nao tem
@@ -56,9 +44,8 @@ faz.
 
 Esse artigo em si esta sendo escrito no codigo fonte desse programa, e se estiver lendo é por
 que o programa funciona. Mas não so isso, olhe esse struct:
-*/
 
-// PIN
+```go
 type MDParser struct {
 	cells        [][2]int // (cellType, extIndex)
 	txtSegments  []*ast.CommentGroup
@@ -67,7 +54,8 @@ type MDParser struct {
 	File         []byte
 }
 
-/*POST
+```
+
 O programa consegue trazer extrair do codigo fonte utilizando apenas um comentario ˋ// PINˋ
 antes do bloco de codigo.Não é incrivel$ Sugiro que seja o arquivo [parser.go](./internal/parser.go)
 e veja que esta tudo la. Pode inclusive tentar voce mesmo:
@@ -78,44 +66,3 @@ go run parser.go ./parser.go
 
 ˋˋˋ
 
-*/
-
-func (p *MDParser) ParseComments(c []*ast.CommentGroup) error {
-	for _, tk := range c {
-		if strings.HasPrefix(tk.Text(), "PIN") {
-			p.pins = append(p.pins, tk)
-			p.cells = append(p.cells, [2]int{PIN, len(p.pins) - 1})
-		} else if strings.HasPrefix(tk.Text(), "POST") {
-			p.txtSegments = append(p.txtSegments, tk)
-			p.cells = append(p.cells, [2]int{TEXT, len(p.txtSegments) - 1})
-		}
-	}
-
-	return nil
-}
-
-func (p *MDParser) ParseDeclarations(decl []ast.Decl) error {
-	for _, tk := range decl {
-		for _, v := range p.pins {
-			if v.End()+1 == tk.Pos() {
-				p.declSegments = append(p.declSegments, tk)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (p MDParser) Flush() []byte {
-	s := "# New file\n\n"
-
-	for _, cell := range p.cells {
-		switch cell[0] {
-		case 1:
-			s += fmt.Sprintf("```go\n%s\n```\n\n", string(p.File[p.pins[cell[1]].End():p.declSegments[cell[1]].End()]))
-		default:
-			s += strings.TrimPrefix(p.txtSegments[cell[1]].Text(), "POST\n") + "\n"
-		}
-	}
-	return []byte(s)
-}
