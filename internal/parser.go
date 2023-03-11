@@ -1,3 +1,7 @@
+/*
+Copyright © 2023 JOEL SCHUTZ <JOELSSCHUTZ@YAHOO.COM.BR>
+
+*/
 package internal
 
 import (
