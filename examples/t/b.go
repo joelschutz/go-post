@@ -3,7 +3,7 @@ package main
 
 import "fmt"
 
-/*POST[pt,es]
+/*POST[es]
 This is a second tipy
 this os multiline
 new line
