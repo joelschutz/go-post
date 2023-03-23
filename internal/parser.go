@@ -9,7 +9,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -68,6 +70,7 @@ que o programa funciona. Mas não so isso, olhe esse struct:
 
 // PIN
 type MDParser struct {
+	targetTag    string
 	cells        [][2]int            // Representa um bloco de texto com estrutura: (cellType, extIndex)
 	txtSegments  []*ast.CommentGroup // Array de commentarios marcados com `POST`
 	declSegments []ast.Decl          // Array de declaracoes marcados com `PIN`
@@ -94,19 +97,54 @@ O funcionamento por enquanto é bastante simples, a classe MDParser implementa a
 // PIN
 func (p *MDParser) parseComments(c []*ast.CommentGroup) error {
 	for _, tk := range c {
-		if strings.HasPrefix(tk.Text(), "PIN") {
-			p.pins = append(p.pins, tk)
-			p.cells = append(p.cells, [2]int{PIN, len(p.pins) - 1})
-		} else if strings.HasPrefix(tk.Text(), "POST") {
-			p.txtSegments = append(p.txtSegments, tk)
-			p.cells = append(p.cells, [2]int{TEXT, len(p.txtSegments) - 1})
+		txt := tk.Text()
+		switch {
+		case strings.HasPrefix(txt, "PIN"):
+			if p.checkTag(txt[3:]) {
+				p.pins = append(p.pins, tk)
+				p.cells = append(p.cells, [2]int{PIN, len(p.pins) - 1})
+			}
+		case strings.HasPrefix(txt, "POST"):
+			if p.checkTag(txt[4:]) {
+				p.txtSegments = append(p.txtSegments, tk)
+				p.cells = append(p.cells, [2]int{TEXT, len(p.txtSegments) - 1})
+			}
 		}
 	}
 
 	return nil
 }
 
-/*POST
+func GetStringInBetweenTwoString(str string, startS string, endS string) (result string, found bool) { // Copied from StackOverflow
+	s := strings.Index(str, startS)
+	if s == -1 {
+		return result, false
+	}
+	newS := str[s+len(startS):]
+	e := strings.Index(newS, endS)
+	if e == -1 {
+		return result, false
+	}
+	result = newS[:e]
+	return result, true
+}
+
+func (p *MDParser) checkTag(text string) bool {
+	if !strings.HasPrefix(text, "[") || p.targetTag == "all" {
+		return true
+	}
+	r, ok := GetStringInBetweenTwoString(text, "[", "]")
+	if ok {
+		for _, tag := range strings.Split(r, ",") {
+			if tag == p.targetTag {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+/*POST[]
 Em parseComments os commentarios extraidos do arquivo sao classificados entre `PIN` e `POST`,
 em seguida adicionados aos arrays correspondentes
 */
@@ -131,14 +169,15 @@ metodo anterior.
 
 // PIN
 func (p MDParser) Flush(title string) string {
-	s := fmt.Sprintf("# %s\n\n", title)
+	var s string
 
 	for _, cell := range p.cells {
 		switch cell[0] {
 		case PIN:
 			s += fmt.Sprintf("```go\n%s```\n\n", string(p.File[p.pins[cell[1]].End():p.declSegments[cell[1]].End()]))
 		case TEXT:
-			s += strings.TrimPrefix(p.txtSegments[cell[1]].Text(), "POST\n") + "\n"
+			txt := p.txtSegments[cell[1]].Text()
+			s += txt[strings.Index(txt, "\n")+1:] + "\n"
 		}
 	}
 	return s
@@ -153,7 +192,7 @@ alvo:
 */
 
 // PIN
-func NewMDParserFromFile(targetFile string) (*MDParser, error) {
+func NewMDParserFromFile(targetFile, targetTag string) (*MDParser, error) {
 	// Criamos a AST do arquivo
 	fs := token.NewFileSet()
 	fTree, err := parser.ParseFile(fs, targetFile, nil, parser.ParseComments)
@@ -168,8 +207,48 @@ func NewMDParserFromFile(targetFile string) (*MDParser, error) {
 	}
 
 	// Devolvemos um ponteiro para o objeto ja parseado
-	p := &MDParser{File: buf}
+	p := &MDParser{File: buf, targetTag: targetTag}
 	p.parseComments(fTree.Comments)
 	p.parseDeclarations(fTree.Decls)
 	return p, nil
+}
+
+func ParseFile(targetFile, targetTag string) error {
+	if !strings.HasSuffix(targetFile, ".go") {
+		return fmt.Errorf("Not a Go source file")
+	}
+	p, err := NewMDParserFromFile(targetFile, targetTag)
+	if err != nil {
+		return err
+	}
+	fname := targetFile + ".md"
+
+	content := p.Flush(targetFile)
+	if len(content) > 0 {
+		ioutil.WriteFile(fname, []byte(content), fs.ModePerm)
+		fmt.Printf("Just parsed %s with tag %s\n", targetFile, targetTag)
+	} else {
+		fmt.Printf("No target comments found in %s\n", targetFile)
+	}
+	return nil
+}
+
+func ParseDir(targetDir, targetTag string) error {
+	fs, err := os.ReadDir(targetDir)
+	if err != nil {
+		return err
+	}
+	for _, v := range fs {
+		if v.IsDir() {
+			err := ParseDir(fmt.Sprintf("%s%s/", targetDir, v.Name()), targetTag)
+			if err != nil {
+				return err
+			}
+		}
+		err := ParseFile(fmt.Sprintf("%s%s", targetDir, v.Name()), targetTag)
+		if err != nil && err.Error() != "Not a Go source file" {
+			return err
+		}
+	}
+	return nil
 }
