@@ -6,29 +6,32 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
+	"strings"
 
 	"github.com/joelschutz/go-post/internal"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "go-post",
+	Use:   "go-post [path to file]",
 	Short: "A brief application to extract selected comments as Markdown",
 	Long: `A brief application to extract selected comments as Markdown.
 	Check repository: https://github.com/joelschutz/go-post`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("parse called", args)
 
-		p, err := internal.NewMDParserFromFile(args[0])
-		if err != nil {
-			log.Fatal(err)
-		}
-		fname := args[0] + ".md"
+		tag, _ := cmd.Flags().GetString("tag")
 
-		ioutil.WriteFile(fname, []byte(p.Flush(args[0])), 0777)
+		for _, path := range args {
+			if strings.HasSuffix(path, "...") {
+				return internal.ParseDir(strings.TrimSuffix(path, "..."), tag)
+			} else {
+				return internal.ParseFile(path, tag)
+			}
+		}
+		return nil
 	},
 }
 
@@ -42,4 +45,5 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringP("tag", "t", "all", "Filters out comments tags different from the specified")
 }

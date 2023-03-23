@@ -1,3 +1,5 @@
+# ./examples/b.go
+
 This is a second tipy
 this os multiline
 new line
